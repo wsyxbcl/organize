@@ -18,10 +18,10 @@ jobs:
             os: ubuntu-latest
             python-arch: x64
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-15-intel
             python-arch: x64
           - target: aarch64-apple-darwin
-            os: macos-latest
+            os: macos-15
             python-arch: arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
