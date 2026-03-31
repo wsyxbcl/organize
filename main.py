@@ -73,6 +73,30 @@ class Cluster:
         df = pd.read_json(json_path, orient="records", encoding="utf-8")
         return df
 
+    def move_with_sidecar(self, src: Path, dest_dir: Path) -> tuple[bool, bool | None]:
+        """Move a file and its sidecar into dest_dir."""
+        dest = dest_dir / src.name
+        try:
+            shutil.move(str(src), str(dest))
+            logger.info(f"Moved {src} to {dest}")
+            moved_main = True
+        except Exception as e:
+            logger.error(f"Failed to move file {src} to {dest}: {e}")
+            return False, None
+
+        sidecar = src.with_name(src.name + '.xmp')
+        moved_sidecar = None
+        if sidecar.exists():
+            dest_sidecar = dest_dir / sidecar.name
+            try:
+                shutil.move(str(sidecar), str(dest_sidecar))
+                logger.info(f"Moved sidecar {sidecar} to {dest_sidecar}")
+                moved_sidecar = True
+            except Exception as e:
+                logger.error(f"Failed to move sidecar {sidecar} to {dest_sidecar}: {e}")
+                moved_sidecar = False
+        return moved_main, moved_sidecar
+
     def move_seq(
         self,
         seq: list[pd.Series],
@@ -102,12 +126,12 @@ class Cluster:
             self.df.loc[self.df["file_id"] == file.file_id, "seq_id"] = self.seq_id
             self.df.loc[self.df["file_id"] == file.file_id, "seq_label"] = label
             dest = folder_path / label
-            logger.info(f"Moving {file.file_path} to {str(dest)}")
-            try:
-                shutil.move(file.file_path, dest)
+            moved_main, moved_sidecar = self.move_with_sidecar(Path(file.file_path), dest)
+            if moved_main:
+                logger.info(f"Moved {file.file_path} to {str(dest)} (sidecar moved: {moved_sidecar})")
                 self.df.loc[self.df["file_id"] == file.file_id, "moved"] = True
-            except Exception as e:
-                logger.error(f"Failed to move file: {e}")
+            else:
+                logger.error(f"Failed to move file: {file.file_path}")
                 self.df.loc[self.df["file_id"] == file.file_id, "moved"] = False
             folder_df = folder_df[folder_df["file_id"] != file.file_id]
         return folder_df
@@ -253,12 +277,12 @@ class Cluster:
                     file.label
                 )
                 dest = folder_path / file.label
-                logger.info(f"Moving {file.file_path} to {str(dest)}")
-                try:
-                    shutil.move(file.file_path, dest)
+                moved_main, moved_sidecar = self.move_with_sidecar(Path(file.file_path), dest)
+                if moved_main:
+                    logger.info(f"Moved {file.file_path} to {str(dest)} (sidecar moved: {moved_sidecar})")
                     self.df.loc[self.df["file_id"] == file.file_id, "moved"] = True
-                except Exception as e:
-                    logger.error(f"Failed to move file: {e}")
+                else:
+                    logger.error(f"Failed to move file: {file.file_path}")
                     self.df.loc[self.df["file_id"] == file.file_id, "moved"] = False
                 folder_df = folder_df[folder_df["file_id"] != file.file_id]
             seq = []
@@ -294,12 +318,12 @@ class Cluster:
             self.seq_id += 1
             self.df.loc[self.df["file_id"] == _file.file_id, "seq_id"] = self.seq_id
             self.df.loc[self.df["file_id"] == _file.file_id, "seq_label"] = _file.label
-            logger.info(f"Moving {_file.file_path} to {str(dest)}")
-            try:
-                shutil.move(_file.file_path, dest)
+            moved_main, moved_sidecar = self.move_with_sidecar(Path(_file.file_path), dest)
+            if moved_main:
+                logger.info(f"Moved {_file.file_path} to {str(dest)} (sidecar moved: {moved_sidecar})")
                 self.df.loc[self.df["file_id"] == _file.file_id, "moved"] = True
-            except Exception as e:
-                logger.error(f"Failed to move file: {e}")
+            else:
+                logger.error(f"Failed to move file: {_file.file_path}")
                 self.df.loc[self.df["file_id"] == _file.file_id, "moved"] = False
             folder_df = folder_df[folder_df["file_id"] != _file.file_id]
         return folder_df
@@ -310,12 +334,14 @@ class Cluster:
             for file in files:
                 file_path = Path(root) / file
                 if str(file_path.parts[-2]) in ["Animal", "Person", "Vehicle", "Blank"]:
+                    if file_path.suffix.lower() == ".xmp":
+                        continue
                     dest_path = Path(root).parent / file
-                    try:
-                        shutil.move(file_path, dest_path)
-                        logger.info(f"Moving {file_path} to {dest_path}")
-                    except Exception as e:
-                        logger.error(f"Failed to move file: {e}")
+                    moved_main, moved_sidecar = self.move_with_sidecar(file_path, dest_path.parent)
+                    if moved_main:
+                        logger.info(f"Moved {file_path} to {dest_path} (sidecar moved: {moved_sidecar})")
+                    else:
+                        logger.error(f"Failed to move file: {file_path}")
 
 
 def organize(result: Path, mode: str):
